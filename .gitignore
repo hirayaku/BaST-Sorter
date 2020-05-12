@@ -1,0 +1,5 @@
+**/*.so
+**/build_dir
+
+**/*.swp
+**/tags
