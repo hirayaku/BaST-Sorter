@@ -105,7 +105,7 @@ module mkBitonicMergerTest(Empty);
     endrule
 
     rule doMerge;
-        DataBeat#(VecSz, UInt#(32)) databeat = ?;
+        DataBeat#(Vector, VecSz, UInt#(32)) databeat = ?;
 
         if (inFIFO.notEmpty) begin
             let inVec <- toGet(inFIFO).get;
@@ -178,7 +178,7 @@ module mkBitonicSorterTest(Empty);
     endrule
 
     rule doMerge;
-        DataBeat#(VecSz, UInt#(32)) databeat = ?;
+        DataBeat#(Vector, VecSz, UInt#(32)) databeat = ?;
 
         if (inFIFO.notEmpty) begin
             let inVec <- toGet(inFIFO).get;

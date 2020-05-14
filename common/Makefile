@@ -12,15 +12,28 @@ BitonicNetwork: % : %.bsv Test%.bsv
 
 BitonicMerger: BitonicNetwork
 	mkdir -p build_dir/$@
-	bsc $(bscflags) -sim -u -g mkBitonic$@Test Test$<.bsv
-	bsc $(bscflags) -sim -u -e mkBitonic$@Test -o $@
+	bsc $(bscflags) -sim -u -g mk$@Test Test$<.bsv
+	bsc $(bscflags) -sim -u -e mk$@Test -o $@
 
 BitonicSorter: BitonicNetwork
 	mkdir -p build_dir/$@
-	bsc $(bscflags) -sim -u -g mkBitonic$@Test Test$<.bsv
-	bsc $(bscflags) -sim -u -e mkBitonic$@Test -o $@
+	bsc $(bscflags) -sim -u -g mk$@Test Test$<.bsv
+	bsc $(bscflags) -sim -u -e mk$@Test -o $@
 
-all: Merger Sorter
+Bitonic: BitonicMerger BitonicSorter
+
+SeqMerger: SeqMerger.bsv TestSeqMerger.bsv
+
+MergerInner: SeqMerger
+	mkdir -p build_dir/$@
+	bsc $(bscflags) -sim -u -g mk$@Test Test$<.bsv
+	bsc $(bscflags) -sim -u -e mk$@Test -o $@
+
+Merger: SeqMerger
+	mkdir -p build_dir/$@
+	bsc $(bscflags) -sim -u -g mk$@Test Test$<.bsv
+	bsc $(bscflags) -sim -u -e mk$@Test -o $@
+
 
 # targets := Bitonic BitonicPipelined StreamingMerge2 StreamingMergeSort StreamingMerge2Var MergeNFoldBRAM
 #

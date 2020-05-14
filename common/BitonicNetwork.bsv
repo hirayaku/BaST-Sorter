@@ -5,6 +5,7 @@ import FIFO::*;
 import FIFOF::*;
 import GetPut::*;
 import Vector::*;
+import MergerTypes::*;
 
 // Compare-and-Swap circuit
 function Tuple2#(itype, itype) cas(Tuple2#(itype, itype) inTup, Bool ascending)
@@ -34,12 +35,6 @@ function Vector#(n, itype) halfClean(Vector#(n, itype) inVec, Bool ascending)
 endfunction
 
 
-typedef struct {
-    Bool valid;
-    Vector#(n, itype) data;
-} DataBeat#(numeric type n, type itype)
-  deriving(Bits);
-
 // Pipelined Butterfly Merger Network Unguarded
 // It only merges two sorted sequences coming in the same cycle
 // Implemented recursively in typeclass `BitonicMergerN`
@@ -47,8 +42,8 @@ typedef struct {
 // request.put          =>      submit a bitonic sequence (DataBeat) to be merged
 // response.get         =>      get a merged sequence (DataBeat), flagged by `valid`
 typedef Server#(
-    DataBeat#(n, itype),
-    DataBeat#(n, itype)
+    DataBeat#(Vector, n, itype),
+    DataBeat#(Vector, n, itype)
 ) BitonicMerger#(numeric type n, type itype);
 
 typeclass BitonicMergerN#(numeric type n, type itype);
@@ -70,14 +65,14 @@ instance BitonicMergerN#(2, itype)
 
         interface Put request;
             // this method should be called **every cycle** by outer modules
-            method Action put(DataBeat#(2, itype) in);
+            method Action put(DataBeat#(Vector, 2, itype) in);
                 stage <= halfClean(in.data, ascending);
                 stageValid <= in.valid;
             endmethod
         endinterface
 
         interface Get response;
-            method ActionValue#(DataBeat#(2, itype)) get;
+            method ActionValue#(DataBeat#(Vector, 2, itype)) get;
                 return DataBeat {
                     valid: stageValid,
                     data: stage
@@ -127,14 +122,14 @@ instance BitonicMergerN#(n, itype)
 
         interface Put request;
             // this method should be called **every cycle** by outer modules
-            method Action put(DataBeat#(n, itype) in);
+            method Action put(DataBeat#(Vector, n, itype) in);
                 stage <= halfClean(in.data, ascending);
                 stageValid <= in.valid;
             endmethod
         endinterface
 
         interface Get response;
-            method ActionValue#(DataBeat#(n, itype)) get;
+            method ActionValue#(DataBeat#(Vector, n, itype)) get;
                 let top <- childMergers[0].response.get;
                 let bottom <- childMergers[1].response.get;
                 return DataBeat {
@@ -170,7 +165,7 @@ instance BitonicMergerN#(n, itype)
 
         interface Put request;
             // this method should be called **every cycle** by outer modules
-            method Action put(DataBeat#(n, itype) in);
+            method Action put(DataBeat#(Vector, n, itype) in);
                 Vector#(n2, itype) top = take(in.data);
                 Vector#(n2, itype) bottom = reverse(drop(in.data));
                 stage <= halfClean(append(top, bottom), ascending);
@@ -179,7 +174,7 @@ instance BitonicMergerN#(n, itype)
         endinterface
 
         interface Get response;
-            method ActionValue#(DataBeat#(n, itype)) get;
+            method ActionValue#(DataBeat#(Vector, n, itype)) get;
                 let top <- childMergers[0].response.get;
                 let bottom <- childMergers[1].response.get;
                 return DataBeat {
@@ -200,8 +195,8 @@ endinstance
 // response.get         =>      get a sorted sequence, flagged by `valid`
 
 typedef Server#(
-    DataBeat#(n, itype),
-    DataBeat#(n, itype)
+    DataBeat#(Vector, n, itype),
+    DataBeat#(Vector, n, itype)
 ) BitonicSorter#(numeric type n, type itype);
 
 typeclass BitonicSorterN#(numeric type n, type itype);
@@ -253,7 +248,7 @@ instance BitonicSorterN#(n, itype)
 
         interface Put request;
             // request.put should be called **every cycle** by outer modules
-            method Action put(DataBeat#(n, itype) in);
+            method Action put(DataBeat#(Vector, n, itype) in);
                 Vector#(n2, itype) top = take(in.data);
                 Vector#(n2, itype) bottom = drop(in.data);
                 childSorters[0].request.put(DataBeat{
