@@ -1,12 +1,10 @@
-import ClientServer::*;
 import Vector::*;
-import DefaultValue::*;
 
 // vector data with `valid` signal
 typedef struct {
     Bool valid;
-    vtype#(n, itype) data;
-} DataBeat#(type vtype, numeric type n, type itype) deriving(Bits);
+    Vector#(n, itype) data;
+} DataBeat#(numeric type n, type itype) deriving(Bits);
 
 // Tag to identify special keys
 typedef enum { MinKey, Normal, MaxKey } KeyTag deriving(Bits, Eq);
@@ -20,7 +18,10 @@ endinstance
 typedef struct {
    KeyTag tag;
    itype  data;
-} Item#(type itype) deriving(Bits, Eq);
+} Item#(type itype) deriving(Bits);
+
+Item#(itype) minItem = Item { tag: MinKey, data: ?};
+Item#(itype) maxItem = Item { tag: MaxKey, data: ?};
 
 function Item#(itype) toMinItem(itype data);
    return Item {
@@ -53,6 +54,14 @@ function Bool \> (Item#(itype) i1, Item#(itype) i2);
 endfunction
 endinstance
 
+instance Eq#(Item#(itype)) provisos(Eq#(itype));
+function Bool \== (Item#(itype) x1, Item#(itype) x2);
+   return ((x1.tag == MinKey) && (x2.tag == MinKey)) ||
+          ((x1.tag == MaxKey) && (x2.tag == MaxKey)) ||
+          ((x1.tag == Normal) && (x2.tag == Normal) && x1.data == x2.data);
+endfunction
+endinstance
+
 instance FShow#(Item#(itype)) provisos(FShow#(itype));
 function Fmt fshow(Item#(itype) i);
    if (i.tag == MinKey) begin
@@ -78,23 +87,4 @@ function Ordering compare (SeqIdx idx1, SeqIdx idx2);
 endfunction
 endinstance
 */
-
-typedef enum { InitRound, OddRound, EvenRound } Round deriving(Bits, Eq);
-
-typedef struct {
-   Round round;
-   Vector#(n, itype) vec;
-} SeqVec#(numeric type n, type itype) deriving(Bits);
-
-function Bool cmpSeqVec(SeqVec#(n, itype) sv1, SeqVec#(n, itype) sv2, Bool ascending)
-   provisos(Add#(1, a__, n),
-            Ord#(itype));
-   if (ascending) begin
-      return last(sv1.vec) < last(sv2.vec);
-   end else begin
-      return last(sv1.vec) >= last(sv2.vec);
-   end
-endfunction
-
-typedef enum { DeqA, DeqB } DeqSel deriving(Bits, Eq);
 

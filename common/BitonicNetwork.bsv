@@ -42,9 +42,16 @@ endfunction
 // request.put          =>      submit a bitonic sequence (DataBeat) to be merged
 // response.get         =>      get a merged sequence (DataBeat), flagged by `valid`
 typedef Server#(
-    DataBeat#(Vector, n, itype),
-    DataBeat#(Vector, n, itype)
+    DataBeat#(n, itype),
+    DataBeat#(n, itype)
 ) BitonicMerger#(numeric type n, type itype);
+
+// interface BitonicMerger#(numeric type n, type itype);
+//    (* always_ready *)
+//    interface Put#(DataBeat#(n, itype)) request;
+//    (* always_ready *)
+//    interface Get#(DataBeat#(n, itype)) response;
+// endinterface
 
 typeclass BitonicMergerN#(numeric type n, type itype);
     module mkBitonicMerger#(Bool ascending) (BitonicMerger#(n, itype));
@@ -65,14 +72,14 @@ instance BitonicMergerN#(2, itype)
 
         interface Put request;
             // this method should be called **every cycle** by outer modules
-            method Action put(DataBeat#(Vector, 2, itype) in);
+            method Action put(DataBeat#(2, itype) in);
                 stage <= halfClean(in.data, ascending);
                 stageValid <= in.valid;
             endmethod
         endinterface
 
         interface Get response;
-            method ActionValue#(DataBeat#(Vector, 2, itype)) get;
+            method ActionValue#(DataBeat#(2, itype)) get;
                 return DataBeat {
                     valid: stageValid,
                     data: stage
@@ -122,14 +129,14 @@ instance BitonicMergerN#(n, itype)
 
         interface Put request;
             // this method should be called **every cycle** by outer modules
-            method Action put(DataBeat#(Vector, n, itype) in);
+            method Action put(DataBeat#(n, itype) in);
                 stage <= halfClean(in.data, ascending);
                 stageValid <= in.valid;
             endmethod
         endinterface
 
         interface Get response;
-            method ActionValue#(DataBeat#(Vector, n, itype)) get;
+            method ActionValue#(DataBeat#(n, itype)) get;
                 let top <- childMergers[0].response.get;
                 let bottom <- childMergers[1].response.get;
                 return DataBeat {
@@ -165,7 +172,7 @@ instance BitonicMergerN#(n, itype)
 
         interface Put request;
             // this method should be called **every cycle** by outer modules
-            method Action put(DataBeat#(Vector, n, itype) in);
+            method Action put(DataBeat#(n, itype) in);
                 Vector#(n2, itype) top = take(in.data);
                 Vector#(n2, itype) bottom = reverse(drop(in.data));
                 stage <= halfClean(append(top, bottom), ascending);
@@ -174,7 +181,7 @@ instance BitonicMergerN#(n, itype)
         endinterface
 
         interface Get response;
-            method ActionValue#(DataBeat#(Vector, n, itype)) get;
+            method ActionValue#(DataBeat#(n, itype)) get;
                 let top <- childMergers[0].response.get;
                 let bottom <- childMergers[1].response.get;
                 return DataBeat {
@@ -195,8 +202,8 @@ endinstance
 // response.get         =>      get a sorted sequence, flagged by `valid`
 
 typedef Server#(
-    DataBeat#(Vector, n, itype),
-    DataBeat#(Vector, n, itype)
+    DataBeat#(n, itype),
+    DataBeat#(n, itype)
 ) BitonicSorter#(numeric type n, type itype);
 
 typeclass BitonicSorterN#(numeric type n, type itype);
@@ -248,7 +255,7 @@ instance BitonicSorterN#(n, itype)
 
         interface Put request;
             // request.put should be called **every cycle** by outer modules
-            method Action put(DataBeat#(Vector, n, itype) in);
+            method Action put(DataBeat#(n, itype) in);
                 Vector#(n2, itype) top = take(in.data);
                 Vector#(n2, itype) bottom = drop(in.data);
                 childSorters[0].request.put(DataBeat{

@@ -9,7 +9,7 @@ import Randomizable::*;
 
 import BitonicNetwork::*;
 
-typedef 16 VecSz;
+typedef `VecSz VecSz;
 Bool ascending = True;
 
 module mkHalfCleanTest(Empty);

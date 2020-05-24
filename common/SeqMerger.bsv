@@ -1,5 +1,6 @@
 
 import ClientServer::*;
+import Cntrs::*;
 import FIFO::*;
 import FIFOF::*;
 import GetPut::*;
@@ -9,20 +10,17 @@ import MergerTypes::*;
 import BitonicNetwork::*;
 
 typedef Server#(
-   DataBeat#(Vector, 3, Vector#(n, itype)),
-   DataBeat#(Vector, n, itype)
+   DataBeat#(3, Vector#(n, itype)),
+   DataBeat#(n, itype)
 ) MergerInner#(numeric type n, type itype);
 
 interface SeqMerger#(numeric type n, type itype);
-   method Action put(DataBeat#(Vector, 2, SeqVec#(n, itype)) in, DeqSel sel, Round round);
-   method ActionValue#(DataBeat#(SeqVec, n, itype)) get;
+   method Action putA(Vector#(n, Item#(itype)) in);
+   method Action putB(Vector#(n, Item#(itype)) in);
+   method ActionValue#(Vector#(n, Item#(itype))) get;
 endinterface
 
-// Pipelined Merger Unguarded
-// Implemented recursively in typeclass `MergerN`
-// Methods:
-// request.put          =>      submit streams of n-sequences to be merged
-// response.get         =>      get a sorted n-sequence, flagged by `valid`
+// Pipelined Vectorized Merger w/o back pressure
 module mkMergerInner#(Bool ascending) (MergerInner#(n, itype))
    provisos(Bits#(Vector::Vector#(n, itype), vWidth),
             Ord#(itype),
@@ -52,8 +50,7 @@ module mkMergerInner#(Bool ascending) (MergerInner#(n, itype))
    endrule
 
    interface Put request;
-      // request.put should be called **every cycle** by outer modules
-      method Action put(DataBeat#(Vector, 3, Vector#(n, itype)) in);
+      method Action put(DataBeat#(3, Vector#(n, itype)) in);
          let valid = in.valid;
          let vec1 = in.data[0];
          let vec2 = in.data[1];
@@ -69,7 +66,7 @@ module mkMergerInner#(Bool ascending) (MergerInner#(n, itype))
    endinterface
 
    interface Get response;
-      method ActionValue#(DataBeat#(Vector, n, itype)) get;
+      method ActionValue#(DataBeat#(n, itype)) get;
          let outB <- mergerB.response.get;
          Vector#(n, itype) outVec = take(outB.data);
          return DataBeat {
@@ -92,83 +89,88 @@ module mkSeqMerger#(Bool ascending) (SeqMerger#(n, itype))
             BitonicMergerN#(nn, Item#(itype)),
             NumAlias#(TMul#(TLog#(nn), 4), fifoD));
 
+   // two input FIFO
+   FIFOF#(Vector#(n, Item#(itype))) fifoA <- mkFIFOF;
+   FIFOF#(Vector#(n, Item#(itype))) fifoB <- mkFIFOF;
+
    // defaultItem value depending on `ascending`
-   Item#(itype) defaultItem = ascending ? Item{tag: MinKey, data: ?} : Item{tag: MaxKey, data: ?};
-   Item#(itype) reverseItem = ascending ? Item{tag: MaxKey, data: ?} : Item{tag: MinKey, data: ?};
+   Item#(itype) defaultItem = ascending ? minItem : maxItem;
+   Item#(itype) reverseItem = ascending ? maxItem : minItem;
 
-   Reg#(SeqVec#(n, itype)) seqVecA <- mkReg(SeqVec{round: InitRound, vec: ?});
-   Reg#(SeqVec#(n, itype)) seqVecB <- mkReg(SeqVec{round: InitRound, vec: ?});
+   Reg#(Vector#(n, Item#(itype))) regA <- mkReg(replicate(defaultItem));
+   Reg#(Vector#(n, Item#(itype))) regB <- mkReg(replicate(defaultItem));
 
-   Reg#(Bool)   valid  <- mkReg(False);
-   FIFO#(Round) roundQ <- mkSizedFIFO(valueOf(fifoD));
-
-   Reg#(DataBeat#(Vector, 3, Vector#(n, Item#(itype)))) mergerIn <- mkReg(DataBeat{valid: False, data: ?});
+   // merger pipeline
+   Reg#(DataBeat#(3, Vector#(n, Item#(itype)))) mergerIn <- mkReg(DataBeat{valid: False, data: ?});
    MergerInner#(n, Item#(itype)) merger_i <- mkMergerInner(ascending);
 
-   rule merge;
+   // output FIFO, with credit-based flow control for merger_i
+   FIFO#(Vector#(n, Item#(itype)))  fifoOut <- mkSizedFIFO(valueOf(fifoD));
+   UCount capacity <- mkUCount(0, valueOf(fifoD));
+
+   // this rule should always fire
+   rule doDeq;
+      if (!fifoA.notEmpty || !fifoB.notEmpty || !capacity.isLessThan(valueOf(fifoD))) begin
+         // either input FIFO is empty or there is not enough space for output FIFO
+         mergerIn <= DataBeat {valid: False, data: ?};
+
+      end else begin
+         let vecNA = fifoA.first;
+         let vecNB = fifoB.first;
+         let selA = ascending? head(vecNB) > head(vecNA) : head(vecNA) > head(vecNB);
+         // mark the end of both sequences
+         let seqEnd = (head(vecNA) == reverseItem) && (head(vecNB) == reverseItem);
+
+         if (seqEnd || selA) begin
+            regA <= vecNA;
+            fifoA.deq;
+         end
+         if (seqEnd || !selA) begin
+            regB <= vecNB;
+            fifoB.deq;
+         end
+
+         Vector#(3, Vector#(n, Item#(itype))) inVec;
+         inVec[0] = regA; inVec[1] = regB; inVec[2] = (selA)? vecNA : vecNB;
+
+         if (head(regA) == reverseItem) begin
+            inVec[0] = replicate(defaultItem);
+         end
+         if (head(regB) == reverseItem) begin
+            inVec[1] = replicate(defaultItem);
+         end
+
+         mergerIn <= DataBeat {valid: True, data: inVec};
+         capacity.incr(1);
+      end
+   endrule
+
+   (* fire_when_enabled, no_implicit_conditions *)
+   rule toMerger;
        merger_i.request.put(mergerIn);
    endrule
 
-   // request.put should be called **every cycle** by outer modules
-   method Action put(DataBeat#(Vector, 2, SeqVec#(n, itype)) in, DeqSel sel, Round round);
-      // update internal states
-      if (in.valid) begin
-         case (sel)
-         DeqA:
-            seqVecA <= in.data[0];
-         DeqB:
-            seqVecB <= in.data[1];
-         endcase
-         roundQ.enq(round);
-      end
-      valid <= in.valid;
-
-      let vecA = map(toNormalItem, seqVecA.vec);
-      let vecB = map(toNormalItem, seqVecB.vec);
-      let vecN = map(toNormalItem, in.data[pack(sel)].vec);
-      if (seqVecA.round != round) begin
-         // seq A has finished first
-         vecA = replicate(defaultItem);
-      end
-      if (seqVecB.round != round) begin
-         // seq B has finished first
-         vecB = replicate(defaultItem);
-      end
-      // if (in.data[sel].round != round) begin
-      //    // the remaining seq has finished
-      //    vecN = replicate(reverseItem);
-      // end
-
-      Vector#(3, Vector#(n, Item#(itype))) inVec;
-      inVec[0] = vecA; inVec[1] = vecB; inVec[2] = vecN;
-      mergerIn <= DataBeat{
-         valid: valid,
-         data: inVec
-      };
-
-      /* if (valid) begin */
-      /*    $display("To Merger: "); */
-      /*    $display("  ", fshow(vecA)); */
-      /*    $display("  ", fshow(vecB)); */
-      /*    $display("  ", fshow(vecN)); */
-      /* end */
-   endmethod
-
-   method ActionValue#(DataBeat#(SeqVec, n, itype)) get;
+   rule fromMerger;
       let out <- merger_i.response.get;
-      let round <- toGet(roundQ).get;
       if (out.valid) begin
+         Vector#(n, Item#(itype)) outVec = out.data;
+         if (head(outVec) == defaultItem) begin
+            outVec = replicate(reverseItem);
+         end
+         fifoOut.enq(outVec);
+         /*
          $display("From Merger: ");
-         Vector#(n, Item#(itype)) outVec = take(out.data);
          $display("  ", fshow(outVec));
+         */
       end
-      return DataBeat {
-         valid: out.valid,
-         data: SeqVec {
-            round: round,
-            vec: take(map(fromItem, out.data))
-         }
-      };
+   endrule
+
+   method Action putA(Vector#(n, Item#(itype)) in) = toPut(fifoA).put(in);
+   method Action putB(Vector#(n, Item#(itype)) in) = toPut(fifoB).put(in);
+   method ActionValue#(Vector#(n, Item#(itype))) get;
+      let out <- toGet(fifoOut).get;
+      capacity.decr(1);
+      return out;
    endmethod
 
 endmodule
