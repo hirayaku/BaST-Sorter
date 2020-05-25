@@ -16,10 +16,10 @@ targets_obj = $(wildcard *.o)
 targets_lib = $(wildcard *.so)
 
 # set default vector size
-ifeq ($(K),)
-	K=8
+ifeq ($(N),)
+	N=8
 endif
-bscflags += -D VecSz=$(K)
+bscflags += -D VecSz=$(N)
 
 BitonicNetwork: % : $(src_dir)/%.bsv $(test_dir)/Test%.bsv
 
@@ -38,7 +38,7 @@ Bitonic: BitonicMerger BitonicSorter
 SeqMerger: % : $(src_dir)/%.bsv $(test_dir)/Test%.bsv
 
 CppHelper.o: $(src_dir)/helper.cpp
-	g++ -fPIC -DK=$(K) -c $< -o $@
+	g++ -fPIC -DN=$(N) -c $< -o $@
 
 MergerInner: SeqMerger
 	mkdir -p build_dir/$@

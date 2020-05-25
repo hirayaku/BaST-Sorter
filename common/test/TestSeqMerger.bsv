@@ -110,7 +110,7 @@ module mkMergerTest(Empty);
       inited <= True;
    endrule
 
-   Integer maxRound = 2;
+   Integer maxRound = 64;
    Reg#(UInt#(32)) round <- mkReg(0);
    Reg#(UInt#(32)) testCnt <- mkReg(0);
    SeqMerger#(VecSz, UInt#(32)) merger <- mkSeqMerger(ascending);
@@ -173,11 +173,11 @@ module mkMergerTest(Empty);
             end_fifoA.deq;
          end
 
-         merger.putA(in);
-         // $display("[@%9d] putA: ", tick, fshow(in));
+         merger.inA.put(in);
+         $display("[@%9d] putA: ", tick, fshow(in));
 
       end else begin
-         merger.putA(replicate(maxItem));
+         merger.inA.put(replicate(maxItem));
          end_fifoA.deq;
       end
    endrule
@@ -209,11 +209,11 @@ module mkMergerTest(Empty);
             end_fifoB.deq;
          end
 
-         merger.putB(in);
-         // $display("[@%9d] putB: ", tick, fshow(in));
+         merger.inB.put(in);
+         $display("[@%9d] putB: ", tick, fshow(in));
 
       end else begin
-         merger.putB(replicate(maxItem));
+         merger.inB.put(replicate(maxItem));
          end_fifoB.deq;
       end
 
@@ -221,7 +221,7 @@ module mkMergerTest(Empty);
 
    Reg#(Bool) valid_seq <- mkReg(False);
    rule extract_merger (inited);
-      let out <- merger.get;
+      let out <- merger.out.get;
 
       $display("[@%9d] output No.%4d: ", tick, testCnt, fshow(out));
       if (out[0] != maxItem) begin

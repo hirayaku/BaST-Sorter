@@ -227,7 +227,7 @@ class Round
     Round(SortType st) : sort_type(st), in_vecs(0), in_offs(0), out_vec(0), out_off(0) {}
 
     size_t add_seq(std::vector<uint32_t> &vec, SortType st) {
-        assert(vec.size() / K * K == vec.size());
+        assert(vec.size() / N * N == vec.size());
         if (out_off != 0) {
             printf("out_off = %d\n", out_off);
         }
