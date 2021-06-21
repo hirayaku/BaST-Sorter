@@ -127,6 +127,7 @@ provisos(Bits#(itype, width),
       rule doDeq;
          if (!fifoA.notEmpty || !fifoB.notEmpty || !capacity.isLessThan(valueOf(fifoD))) begin
             // either input FIFO is empty or there is not enough space for output FIFO
+            // XXX: we would like regA and regB to continue even if fifoA/fifoB are empty
             mergerIn <= DataBeat {valid: False, data: ?};
 
          end else begin
